@@ -5,6 +5,10 @@ on:
     tags:
       - 'v*'
 
+# Явно даём права на запись в репозиторий (нужно для создания релизов)
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -20,23 +24,9 @@ jobs:
         nasm -f elf64 xor.asm -o xor.o
         ld -o tiny-xor xor.o
     
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
+    - name: Create Release and Upload Asset
+      uses: softprops/action-gh-release@v2
+      with:
+        files: tiny-xor
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
-        draft: false
-        prerelease: false
-    
-    - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./tiny-xor
-        asset_name: tiny-xor
-        asset_content_type: application/octet-stream
