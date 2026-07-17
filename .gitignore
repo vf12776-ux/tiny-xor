@@ -1,0 +1,6 @@
+tiny-xor
+xor.o
+*.bin
+decrypted.txt
+wrong.txt
+secret.txt

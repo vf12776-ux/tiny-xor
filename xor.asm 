@@ -1,0 +1,139 @@
+global _start
+
+section .bss
+    buf resb 4096       ; Буфер для чтения файла (4 КБ)
+
+section .data
+    err_usage db "Usage: tiny-xor <input_file> <output_file> <key>", 10
+    err_usage_len equ $ - err_usage
+    err_open db "Error: Cannot open file", 10
+    err_open_len equ $ - err_open
+    err_read db "Error: Cannot read file", 10
+    err_read_len equ $ - err_read
+    err_key db "Error: Key cannot be empty", 10
+    err_key_len equ $ - err_key
+
+section .text
+_start:
+    ; === 1. Разбор аргументов (argc/argv) ===
+    pop rdi             ; rdi = argc (количество аргументов)
+    cmp rdi, 4          ; Ожидаем: программа + 3 аргумента = 4
+    jne .usage_error
+
+    pop rax             ; argv[0] (имя программы) - игнорируем
+    pop rsi             ; argv[1] (входной файл)
+    pop rdx             ; argv[2] (выходной файл)
+    pop r8              ; argv[3] (ключ)
+
+    ; Считаем длину ключа
+    xor r9, r9          ; r9 = длина ключа
+.calc_key_len:
+    mov al, [r8 + r9]
+    test al, al         ; Ищем нулевой терминатор (конец строки)
+    jz .key_len_done
+    inc r9
+    jmp .calc_key_len
+.key_len_done:
+    test r9, r9
+    jz .empty_key_error ; Если ключ пустой - выходим
+
+    ; === 2. Открытие файлов ===
+    ; Открываем входной файл (O_RDONLY = 0)
+    mov rax, 2          ; sys_open
+    mov rdi, rsi        ; путь
+    xor rsi, rsi        ; флаги = 0
+    syscall
+    test rax, rax
+    js .open_error
+    mov r10, rax        ; r10 = in_fd
+
+    ; Открываем выходной файл (O_WRONLY | O_CREAT | O_TRUNC = 577)
+    mov rax, 2          ; sys_open
+    mov rdi, rdx        ; путь
+    mov rsi, 577        ; флаги (1 | 64 | 512)
+    mov rdx, 420        ; права 0644 (rw-r--r--)
+    syscall
+    test rax, rax
+    js .open_error
+    mov r12, rax        ; r12 = out_fd
+
+    ; === 3. Главный цикл: Чтение -> XOR -> Запись ===
+.read_loop:
+    ; Читаем кусок файла
+    mov rax, 0          ; sys_read
+    mov rdi, r10        ; in_fd
+    mov rsi, buf        ; буфер
+    mov rdx, 4096       ; сколько читать
+    syscall
+    
+    test rax, rax
+    js .read_error      ; Ошибка чтения
+    jz .done            ; Если вернул 0 - это конец файла (EOF)
+    
+    mov rbx, rax        ; rbx = количество прочитанных байт
+
+    ; Применяем XOR к прочитанному куску
+    xor r13, r13        ; r13 = индекс текущего символа ключа
+    mov r14, buf        ; r14 = указатель на текущий байт в буфере
+    mov r15, rbx        ; r15 = счетчик оставшихся байт
+
+.xor_loop:
+    test r15, r15
+    jz .xor_done        ; Обработали весь кусок
+
+    mov al, [r14]       ; Берем байт из файла
+    mov cl, [r8 + r13]  ; Берем байт из ключа
+    xor al, cl          ; XOR!
+    mov [r14], al       ; Кладем зашифрованный байт обратно
+
+    inc r14             ; Следующий байт в буфере
+    inc r13             ; Следующий байт в ключе
+    cmp r13, r9         ; Дошли до конца ключа?
+    jl .no_wrap
+    xor r13, r13        ; Если да - начинаем ключ сначала
+.no_wrap:
+    dec r15             ; Уменьшаем счетчик байт
+    jmp .xor_loop
+.xor_done:
+
+    ; Записываем обработанный кусок
+    mov rax, 1          ; sys_write
+    mov rdi, r12        ; out_fd
+    mov rsi, buf        ; буфер
+    mov rdx, rbx        ; сколько писать
+    syscall
+
+    jmp .read_loop      ; Повторяем для следующего куска
+
+    ; === 4. Завершение работы ===
+.done:
+    ; Закрываем файлы
+    mov rax, 3          ; sys_close
+    mov rdi, r10
+    syscall
+    mov rax, 3
+    mov rdi, r12
+    syscall
+
+    ; Успешный выход
+    mov rax, 60
+    xor rdi, rdi
+    syscall
+
+    ; === Обработка ошибок ===
+.usage_error:
+    mov rax, 1; mov rdi, 1; mov rsi, err_usage; mov rdx, err_usage_len; syscall
+    jmp .exit_err
+.empty_key_error:
+    mov rax, 1; mov rdi, 1; mov rsi, err_key; mov rdx, err_key_len; syscall
+    jmp .exit_err
+.open_error:
+    mov rax, 1; mov rdi, 1; mov rsi, err_open; mov rdx, err_open_len; syscall
+    jmp .exit_err
+.read_error:
+    mov rax, 1; mov rdi, 1; mov rsi, err_read; mov rdx, err_read_len; syscall
+
+.exit_err:
+    mov rax, 60
+    mov rdi, 1          ; Код выхода 1 (ошибка)
+    syscall
