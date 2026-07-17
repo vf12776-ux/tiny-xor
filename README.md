@@ -1,3 +1,5 @@
+![Build Status](https://github.com/vf12776-ux/tiny-xor/actions/workflows/build.yml/badge.svg)
+
 # 🔐 tiny-xor
 
 **Blazing fast, zero-dependency file encryption tool written in pure x86_64 Assembly.**

@@ -1,0 +1,36 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install NASM
+      run: sudo apt-get update && sudo apt-get install -y nasm
+    
+    - name: Build
+      run: |
+        nasm -f elf64 xor.asm -o xor.o
+        ld -o tiny-xor xor.o
+    
+    - name: Test
+      run: |
+        echo "Test message" > test.txt
+        ./tiny-xor test.txt encrypted.bin test_key
+        ./tiny-xor encrypted.bin decrypted.txt test_key
+        diff test.txt decrypted.txt
+        echo "✅ All tests passed!"
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: tiny-xor-binary
+        path: tiny-xor
