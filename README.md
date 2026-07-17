@@ -1,4 +1,5 @@
 ![Build Status](https://github.com/vf12776-ux/tiny-xor/actions/workflows/build.yml/badge.svg)
+![Release](https://img.shields.io/github/v/release/vf12776-ux/tiny-xor)
 
 # 🔐 tiny-xor
 
